@@ -1,5 +1,11 @@
 package dev.svyat.geolocation;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.w3c.dom.Document;
+
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesClient;
 import com.google.android.gms.location.LocationClient;
@@ -8,10 +14,14 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
 
 import android.support.v7.app.ActionBarActivity;
 import android.support.v4.app.Fragment;
+import android.app.Activity;
+import android.graphics.Color;
 import android.location.Location;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -34,14 +44,6 @@ GooglePlayServicesClient.OnConnectionFailedListener{
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        
-        try {
-            // Loading map
-            initilizeMap();
- 
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
 
         if (savedInstanceState == null) {
             getSupportFragmentManager().beginTransaction()
@@ -50,9 +52,6 @@ GooglePlayServicesClient.OnConnectionFailedListener{
         }
     }
 
-    /**
-     * A placeholder fragment containing a simple view.
-     */
     public static class PlaceholderFragment extends Fragment {
 
         public PlaceholderFragment() {
@@ -97,21 +96,115 @@ GooglePlayServicesClient.OnConnectionFailedListener{
             				lat = location.getLatitude();
             				lon = location.getLongitude();
             				googleMap.addMarker(new MarkerOptions().position(new LatLng(lat, lon)).title("It's You"));
+            				googleMap.addMarker(new MarkerOptions().position(new LatLng(55.743753, 37.673283)).title("It's finish"));
                 			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lon), 15));
+                			findDirections(lat, lon, 55.743753, 37.673283, GMapV2Direction.MODE_DRIVING );
             			}
             			else{
             				googleMap.addMarker(new MarkerOptions().position(new LatLng(lat, lon)).title("It's You"));
             			}
+            			
             		}
             	});
+            	
             }
         }
+    }
+    
+    public class GetDirectionsAsyncTask extends AsyncTask<Map<String, String>, Object, ArrayList<LatLng>>
+    {
+        public static final String USER_CURRENT_LAT = "user_current_lat";
+        public static final String USER_CURRENT_LONG = "user_current_long";
+        public static final String DESTINATION_LAT = "destination_lat";
+        public static final String DESTINATION_LONG = "destination_long";
+        public static final String DIRECTIONS_MODE = "directions_mode";
+        private Activity activity;
+        private Exception exception;
+     
+        public GetDirectionsAsyncTask(Activity activity)
+        {
+            super();
+            this.activity = activity;
+        }
+     
+        public void onPreExecute()
+        {
+        }
+     
+        @Override
+        public void onPostExecute(ArrayList<LatLng> result)
+        {
+            if (exception == null)
+            {
+                handleGetDirectionsResult(result);
+            }
+            else
+            {
+                processException();
+            }
+        }
+     
+        @Override
+        protected ArrayList<LatLng> doInBackground(Map<String, String>... params)
+        {
+            Map<String, String> paramMap = params[0];
+            try
+            {
+                LatLng fromPosition = new LatLng(Double.valueOf(paramMap.get(USER_CURRENT_LAT)) , Double.valueOf(paramMap.get(USER_CURRENT_LONG)));
+                LatLng toPosition = new LatLng(Double.valueOf(paramMap.get(DESTINATION_LAT)) , Double.valueOf(paramMap.get(DESTINATION_LONG)));
+                GMapV2Direction md = new GMapV2Direction();
+                Document doc = md.getDocument(fromPosition, toPosition, paramMap.get(DIRECTIONS_MODE));
+                ArrayList<LatLng> directionPoints = md.getDirection(doc);
+                return directionPoints;
+            }
+            catch (Exception e)
+            {
+                exception = e;
+                return null;
+            }
+        }
+     
+        private void processException()
+        {
+            Toast.makeText(activity, "Error!(", Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    public void handleGetDirectionsResult(ArrayList<LatLng> directionPoints)
+    {
+        //Polyline newPolyline;
+        PolylineOptions rectLine = new PolylineOptions().width(3).color(Color.BLUE);
+        for(int i = 0 ; i < directionPoints.size() ; i++)
+        {
+            rectLine.add(directionPoints.get(i));
+        }
+        //newPolyline = googleMap.addPolyline(rectLine);
+        googleMap.addPolyline(rectLine);
+    }
+    
+    @SuppressWarnings("unchecked")
+	public void findDirections(double fromPositionDoubleLat, double fromPositionDoubleLong, double toPositionDoubleLat, double toPositionDoubleLong, String mode)
+    {
+        Map<String, String> map = new HashMap<String, String>();
+        map.put(GetDirectionsAsyncTask.USER_CURRENT_LAT, String.valueOf(fromPositionDoubleLat));
+        map.put(GetDirectionsAsyncTask.USER_CURRENT_LONG, String.valueOf(fromPositionDoubleLong));
+        map.put(GetDirectionsAsyncTask.DESTINATION_LAT, String.valueOf(toPositionDoubleLat));
+        map.put(GetDirectionsAsyncTask.DESTINATION_LONG, String.valueOf(toPositionDoubleLong));
+        map.put(GetDirectionsAsyncTask.DIRECTIONS_MODE, mode);
+     
+        GetDirectionsAsyncTask asyncTask = new GetDirectionsAsyncTask(this);
+        asyncTask.execute(map);
+    }
+    
+    @Override
+    protected void onStart(){
+    	super.onStart();
+    	initilizeMap();
     }
  
     @Override
     protected void onResume() {
         super.onResume();
-        initilizeMap();
     }
 
 	@Override
